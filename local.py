@@ -39,6 +39,7 @@ import os
 import json
 import logging
 import getopt
+import signal
 
 def get_table(key):
     m = hashlib.md5()
@@ -68,9 +69,10 @@ class Socks5Server(SocketServer.StreamRequestHandler):
     ''' RequesHandlerClass Definition '''
     def handle_tcp(self, sock, remote):
         try:
+            global stop_server
             fdset = [sock, remote]
-            while True:
-                r, w, e = select.select(fdset, [], [])      # use select I/O multiplexing model
+            while not stop_server:
+                r, w, e = select.select(fdset, [], [], 2)      # use select I/O multiplexing model
                 if sock in r:                               # if local socket is ready for reading
                     data = sock.recv(4096)
                     if len(data) <= 0:                      # received all data
@@ -176,9 +178,17 @@ if __name__ == '__main__':
     encrypt_table = ''.join(get_table(KEY))
     decrypt_table = string.maketrans(encrypt_table, string.maketrans('', ''))
     try:
+        global stop_server
+        stop_server = False
         server = ThreadingTCPServer(('', PORT), Socks5Server)   # s.bind(('', 80)) specifies that the socket is reachable by any address the machine happens to have.
         logging.info("starting server at port %d ..." % PORT)
-        server.serve_forever()
+        def sigint_handler(signum, frame):
+            global stop_server    
+            print "ctrl+c exit"  
+            stop_server = True
+            sys.exit()    
+        signal.signal(signal.SIGINT, sigint_handler)  
+	server.serve_forever()
     except socket.error, e:
         logging.error(e)
 

@@ -39,6 +39,7 @@ import os
 import json
 import logging
 import getopt
+import signal
 
 def get_table(key):
     m = hashlib.md5()
@@ -66,10 +67,11 @@ class ThreadingTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 
 class Socks5Server(SocketServer.StreamRequestHandler):
     def handle_tcp(self, sock, remote):
+        global stop_server
         try:
             fdset = [sock, remote]
-            while True:
-                r, w, e = select.select(fdset, [], [])
+            while not stop_server:
+                r, w, e = select.select(fdset, [], [], 2)
                 if sock in r:
                     data = sock.recv(4096)
                     if len(data) <= 0:
@@ -149,8 +151,16 @@ if __name__ == '__main__':
     if '-6' in sys.argv[1:]:
         ThreadingTCPServer.address_family = socket.AF_INET6
     try:
+        global stop_server
+        stop_server = False
         server = ThreadingTCPServer(('', PORT), Socks5Server)
         logging.info("starting server at port %d ..." % PORT)
+        def sigint_handler(signum, frame):
+            global stop_server    
+            print "ctrl+c exit"  
+            stop_server = True
+            sys.exit()    
+        signal.signal(signal.SIGINT, sigint_handler)  
         server.serve_forever()
     except socket.error, e:
         logging.error(e)
